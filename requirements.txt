@@ -31,7 +31,7 @@ pyzbar==0.1.9
 qrcode[pil]==7.4.2
 
 # Cryptography
-cryptography==41.0.8
+cryptography>=40.0.0,<42.0.0
 pycryptodome==3.19.0
 
 # PDF generation
@@ -42,7 +42,7 @@ pydantic==2.5.0
 pydantic-settings==2.1.0
 
 # HTTP client
-httpx==0.25.2
+httpx>=0.24.0,<0.25.0
 requests==2.31.0
 
 # Environment and configuration

@@ -1,6 +1,20 @@
 # Certificate Verifier
 
-An AI-powered certificate verification system that combines document understanding with cryptographic attestation for secure, scalable academic credential verification.
+## 🤔 What This Repository Does
+
+This repository contains a **complete AI-powered academic certificate verification system** that:
+
+1. **📸 Analyzes Certificate Images** - Upload a photo/scan of any academic certificate
+2. **🤖 Extracts Information** - AI automatically reads and extracts student name, institution, course, dates, etc.
+3. **✅ Verifies Authenticity** - Checks against institution databases and detects potential fraud
+4. **🔐 Creates Digital Proof** - Generates cryptographic signatures and QR codes for verified certificates
+5. **📊 Provides Management Tools** - Web dashboard for institutions to manage and review certificates
+
+**Perfect for**: Universities, employers, credential verification services, and students who need to prove their academic credentials digitally.
+
+> 📖 **New here?** Read the [ABOUT.md](ABOUT.md) file for a detailed overview of what this system does and how it works.
+
+---
 
 ## 🚀 Features
 

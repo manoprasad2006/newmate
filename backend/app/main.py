@@ -9,11 +9,24 @@ import uvicorn
 
 from .config import settings
 from .models import CertificateResponse, VerificationRequest
-from .services.supabase_client import SupabaseClient
-from .services.fusion_engine import EnhancedFusionEngine
-from .services.certificate_issuance import CertificateIssuanceService
-from .services.public_verification import PublicVerificationService
+# from .services.supabase_client import SupabaseClient
+# from .services.fusion_engine import EnhancedFusionEngine
+# from .services.certificate_issuance import CertificateIssuanceService
+# from .services.public_verification import PublicVerificationService
 from .utils.helpers import setup_logging, process_image
+from .services.layer1_extraction import Layer1ExtractionService
+from .services.database_service import DatabaseService
+from dotenv import load_dotenv
+import os
+import hashlib
+
+# Load environment variables - try .env first, then fallback to hardcoded
+try:
+    load_dotenv('.env')
+    print("✅ Loaded environment variables from .env file")
+except:
+    print("⚠️ .env file not found, using hardcoded environment variables")
+    import hardcoded_env
 
 # Setup logging
 logger = setup_logging()
@@ -35,15 +48,153 @@ app.add_middleware(
 )
 
 # Initialize services
-supabase_client = SupabaseClient()
-fusion_engine = EnhancedFusionEngine(supabase_client)
-issuance_service = CertificateIssuanceService(supabase_client)
-public_verification_service = PublicVerificationService(supabase_client)
+# supabase_client = SupabaseClient()
+# fusion_engine = EnhancedFusionEngine(supabase_client)
+# issuance_service = CertificateIssuanceService(supabase_client)
+# public_verification_service = PublicVerificationService(supabase_client)
+
+# Initialize services
+gemini_extractor = Layer1ExtractionService()
+database_service = DatabaseService()
 
 @app.get("/")
 async def root():
     """Health check endpoint"""
     return {"message": "Certificate Verifier API is running"}
+
+@app.post("/api/upload")
+async def upload_certificate_gemini(file: UploadFile = File(...)):
+    """Upload PNG/JPEG/PDF certificate and extract details using Gemini AI"""
+    try:
+        # Check file type - accept images and PDFs
+        allowed_types = ['image/png', 'image/jpeg', 'image/jpg', 'application/pdf']
+        if file.content_type not in allowed_types:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"File type not supported. Please upload PNG, JPG, or PDF files. Received: {file.content_type}"
+            )
+        
+        # Read the uploaded file
+        contents = await file.read()
+        
+        # Generate file hash for tracking
+        file_hash = hashlib.sha256(contents).hexdigest()
+        
+        # Handle different file types
+        from PIL import Image
+        import io
+        
+        if file.content_type == 'application/pdf':
+            # For PDF files, we'll need to convert to image first
+            # For now, we'll pass the PDF directly to Gemini (it can handle PDFs)
+            # You might want to add PDF to image conversion here if needed
+            image = None  # Gemini can handle PDF directly
+        else:
+            # For image files, convert to PIL Image
+            image = Image.open(io.BytesIO(contents))
+        
+        # Extract details using Gemini
+        if file.content_type == 'application/pdf':
+            # For PDF files, pass the file contents directly to Gemini
+            extracted_data = await gemini_extractor.extract_fields_from_pdf(contents)
+        else:
+            # For image files, use the PIL image
+            extracted_data = await gemini_extractor.extract_fields(image)
+        
+        # Save to database
+        record_id = await database_service.save_certificate_data(extracted_data, file_hash)
+        
+        # Prepare response data
+        response_data = {
+            "student_name": extracted_data.name,
+            "roll_number": extracted_data.roll_no,
+            "certificate_number": extracted_data.certificate_id,
+            "course_name": extracted_data.course_name,
+            "year": extracted_data.year,
+            "grade": extracted_data.grade,
+            "institution": extracted_data.institution,
+            "issue_date": extracted_data.issue_date,
+            "extraction_method": extracted_data.extraction_method.value,
+            "field_confidences": extracted_data.field_confidences,
+            "database_id": record_id,
+            "file_hash": file_hash,
+            "file_type": file.content_type
+        }
+        
+        # Return the extracted data
+        return {
+            "success": True,
+            "message": "Certificate details extracted and saved successfully",
+            "data": response_data
+        }
+        
+    except Exception as e:
+        logger.error(f"Error processing certificate with Gemini: {str(e)}")
+        return {
+            "success": False,
+            "message": f"Error processing certificate: {str(e)}",
+            "data": None
+        }
+
+@app.get("/api/certificates")
+async def get_all_certificates(limit: int = 100):
+    """Get all stored certificates"""
+    try:
+        certificates = await database_service.get_all_certificates(limit)
+        return {
+            "success": True,
+            "data": certificates,
+            "count": len(certificates)
+        }
+    except Exception as e:
+        logger.error(f"Error retrieving certificates: {str(e)}")
+        return {
+            "success": False,
+            "message": f"Error retrieving certificates: {str(e)}",
+            "data": []
+        }
+
+@app.get("/api/certificates/{certificate_id}")
+async def get_certificate_by_id(certificate_id: str):
+    """Get certificate by certificate ID"""
+    try:
+        certificate = await database_service.get_certificate_by_id(certificate_id)
+        if certificate:
+            return {
+                "success": True,
+                "data": certificate
+            }
+        else:
+            return {
+                "success": False,
+                "message": "Certificate not found",
+                "data": None
+            }
+    except Exception as e:
+        logger.error(f"Error retrieving certificate: {str(e)}")
+        return {
+            "success": False,
+            "message": f"Error retrieving certificate: {str(e)}",
+            "data": None
+        }
+
+@app.get("/api/certificates/student/{student_name}")
+async def get_certificates_by_student(student_name: str):
+    """Get all certificates for a specific student"""
+    try:
+        certificates = await database_service.get_certificates_by_student(student_name)
+        return {
+            "success": True,
+            "data": certificates,
+            "count": len(certificates)
+        }
+    except Exception as e:
+        logger.error(f"Error retrieving student certificates: {str(e)}")
+        return {
+            "success": False,
+            "message": f"Error retrieving student certificates: {str(e)}",
+            "data": []
+        }
 
 @app.post("/upload", response_model=CertificateResponse)
 async def upload_certificate(file: UploadFile = File(...)):

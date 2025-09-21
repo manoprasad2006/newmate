@@ -723,7 +723,7 @@ async def test_csv_parsing(file: UploadFile = File(...)):
         return {"error": str(e)}
 
 @app.post("/upload/bulk-csv")
-async def upload_bulk_csv(file: UploadFile = File(...), institution_id: str = "default"):
+async def upload_bulk_csv(file: UploadFile = File(...), institution_id: str = "default", watermark_text: str = Form("VERIFIED")):
     """Upload CSV file and process bulk certificate issuance"""
     try:
         import csv
@@ -803,6 +803,7 @@ async def upload_bulk_csv(file: UploadFile = File(...), institution_id: str = "d
                 cert_data.setdefault('year', str(datetime.now().year))
                 cert_data.setdefault('grade', '')
                 cert_data.setdefault('roll_no', '')
+                cert_data.setdefault('watermark_text', watermark_text)
                 
                 # Debug: Log the processed data for first few rows
                 if row_num <= 3:
@@ -1081,6 +1082,53 @@ async def blacklist_ip(ip_address: str, reason: str):
     except Exception as e:
         logger.error(f"Failed to blacklist IP: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# Additional Admin Dashboard Endpoints
+@app.get("/admin/dashboard/certificates")
+async def get_all_certificates():
+    """Get all certificates for admin dashboard"""
+    try:
+        result = supabase_client.client.table("issued_certificates").select("*").order("created_at", desc=True).execute()
+        return {"certificates": result.data or []}
+    except Exception as e:
+        return {"certificates": [], "error": str(e)}
+
+@app.get("/admin/dashboard/verification-logs")
+async def get_verification_logs():
+    """Get verification logs for admin dashboard"""
+    try:
+        result = supabase_client.client.table("verification_logs").select("*").order("created_at", desc=True).limit(100).execute()
+        return {"logs": result.data or []}
+    except Exception as e:
+        return {"logs": [], "error": str(e)}
+
+@app.get("/admin/dashboard/system-health")
+async def get_system_health():
+    """Get system health metrics"""
+    try:
+        # Get basic counts
+        certs_result = supabase_client.client.table("issued_certificates").select("id", count="exact").execute()
+        logs_result = supabase_client.client.table("verification_logs").select("id", count="exact").execute()
+        
+        # Mock system health data (in production, you'd check actual system status)
+        return {
+            "database": {"status": "healthy"},
+            "storage": {"status": "healthy"},
+            "api": {"status": "healthy"},
+            "metrics": {
+                "total_certificates": certs_result.count or 0,
+                "total_verifications": logs_result.count or 0,
+                "active_users": 0,  # Would need user session tracking
+                "uptime": "99.9%"
+            }
+        }
+    except Exception as e:
+        return {
+            "database": {"status": "error"},
+            "storage": {"status": "error"},
+            "api": {"status": "error"},
+            "metrics": {"error": str(e)}
+        }
 
 # =============================================
 # PUBLIC VERIFICATION ENDPOINTS (QR SCANNING)

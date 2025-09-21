@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { FileText, BarChart3, Users, Menu, X, Plus, Shield, Home, Award, CheckCircle } from 'lucide-react';
 import Login from './pages/Login';
+import AdminLogin from './pages/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard';
 import StudentDashboard from './pages/StudentDashboard';
 import LegacyVerificationRequest from './pages/LegacyVerificationRequest';
@@ -92,9 +93,18 @@ function App() {
                 <span className="text-xl font-bold text-gray-900">Certificate Verifier</span>
               </div>
               
-              {/* Role-based Navigation */}
-              <div className="flex items-center space-x-4">
-                {userRole === 'university_admin' && (
+            {/* Role-based Navigation */}
+            <div className="flex items-center space-x-4">
+              {!user && (
+                <a
+                  href="/admin/login"
+                  className="text-sm text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md flex items-center"
+                >
+                  <Shield className="h-4 w-4 mr-1" />
+                  Admin Login
+                </a>
+              )}
+              {userRole === 'university_admin' && (
                   <>
                     <div className="hidden md:flex items-center space-x-4">
                       <a
@@ -145,7 +155,7 @@ function App() {
         </nav>
 
         {/* Mobile Navigation Menu */}
-        {mobileMenuOpen && userRole === 'university_admin' && (
+        {mobileMenuOpen && (userRole === 'university_admin' || userRole === 'super_admin') && (
           <div className="md:hidden bg-white border-b border-gray-200">
             <div className="px-4 py-2 space-y-1">
               <a
@@ -180,12 +190,13 @@ function App() {
           {/* Public routes */}
           <Route path="/verify/:attestationId" element={<PublicVerification />} />
           <Route path="/login" element={<Login onAuthSuccess={handleAuthSuccess} />} />
+          <Route path="/admin/login" element={<AdminLogin onAuthSuccess={handleAuthSuccess} />} />
           
           {/* University Admin routes */}
           <Route 
             path="/admin/dashboard" 
             element={
-              userRole === 'university_admin' ? 
+              (userRole === 'university_admin' || userRole === 'super_admin') ? 
                 <AdminDashboard /> : 
                 <Navigate to={getDefaultRoute()} replace />
             } 
@@ -193,7 +204,7 @@ function App() {
           <Route 
             path="/admin/issue-certificate" 
             element={
-              userRole === 'university_admin' ? 
+              (userRole === 'university_admin' || userRole === 'super_admin') ? 
                 <CertificateIssuance /> : 
                 <Navigate to={getDefaultRoute()} replace />
             } 
@@ -201,7 +212,7 @@ function App() {
           <Route 
             path="/admin/legacy-verification" 
             element={
-              userRole === 'university_admin' ? 
+              (userRole === 'university_admin' || userRole === 'super_admin') ? 
                 <ManualReview /> : 
                 <Navigate to={getDefaultRoute()} replace />
             } 

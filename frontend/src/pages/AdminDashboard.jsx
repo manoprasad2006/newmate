@@ -8,8 +8,8 @@ import {
   Building2, 
   Eye, 
   Ban,
-  CheckCircle,
-  XCircle,
+  CheckCircle, 
+  XCircle, 
   Clock,
   Activity
 } from 'lucide-react';
@@ -20,11 +20,23 @@ const AdminDashboard = () => {
   const [verificationTrends, setVerificationTrends] = useState(null);
   const [institutions, setInstitutions] = useState({});
   const [blacklist, setBlacklist] = useState({ blacklisted_certificates: [], blacklisted_ips: [] });
+  const [certificates, setCertificates] = useState([]);
+  const [verificationLogs, setVerificationLogs] = useState([]);
+  const [systemHealth, setSystemHealth] = useState({});
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
+  const [refreshInterval, setRefreshInterval] = useState(null);
 
   useEffect(() => {
     fetchDashboardData();
+    
+    // Set up auto-refresh every 30 seconds
+    const interval = setInterval(fetchDashboardData, 30000);
+    setRefreshInterval(interval);
+    
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, []);
 
   const fetchDashboardData = async () => {
@@ -32,20 +44,44 @@ const AdminDashboard = () => {
       setLoading(true);
       
       // Fetch all dashboard data in parallel
-      const [statsRes, activityRes, trendsRes, institutionsRes, blacklistRes] = await Promise.all([
+      const [
+        statsRes, 
+        activityRes, 
+        trendsRes, 
+        institutionsRes, 
+        blacklistRes,
+        certificatesRes,
+        verificationLogsRes,
+        systemHealthRes
+      ] = await Promise.all([
         fetch('/admin/dashboard/stats'),
         fetch('/admin/dashboard/recent-activity'),
         fetch('/admin/dashboard/verification-trends'),
         fetch('/admin/dashboard/institutions'),
-        fetch('/admin/dashboard/blacklist')
+        fetch('/admin/dashboard/blacklist'),
+        fetch('/admin/dashboard/certificates'),
+        fetch('/admin/dashboard/verification-logs'),
+        fetch('/admin/dashboard/system-health')
       ]);
 
-      const [statsData, activityData, trendsData, institutionsData, blacklistData] = await Promise.all([
+      const [
+        statsData, 
+        activityData, 
+        trendsData, 
+        institutionsData, 
+        blacklistData,
+        certificatesData,
+        verificationLogsData,
+        systemHealthData
+      ] = await Promise.all([
         statsRes.json(),
         activityRes.json(),
         trendsRes.json(),
         institutionsRes.json(),
-        blacklistRes.json()
+        blacklistRes.json(),
+        certificatesRes.json(),
+        verificationLogsRes.json(),
+        systemHealthRes.json()
       ]);
 
       setStats(statsData);
@@ -53,6 +89,9 @@ const AdminDashboard = () => {
       setVerificationTrends(trendsData);
       setInstitutions(institutionsData.institutions || {});
       setBlacklist(blacklistData);
+      setCertificates(certificatesData.certificates || []);
+      setVerificationLogs(verificationLogsData.logs || []);
+      setSystemHealth(systemHealthData);
       
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
@@ -115,7 +154,7 @@ const AdminDashboard = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
+      {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
           <p className="mt-2 text-gray-600">Monitor verification activity, detect fraud, and manage the system</p>
@@ -176,22 +215,21 @@ const AdminDashboard = () => {
               </div>
             </a>
           </div>
-        </div>
+            </div>
 
         {/* Navigation Tabs */}
         <div className="mb-8">
-          <nav className="flex space-x-8">
+          <nav className="flex space-x-8 overflow-x-auto">
             {[
               { id: 'overview', name: 'Overview', icon: BarChart3 },
               { id: 'activity', name: 'Recent Activity', icon: Activity },
-              { id: 'trends', name: 'Fraud Detection', icon: TrendingUp },
-              { id: 'institutions', name: 'Institutions', icon: Building2 },
-              { id: 'blacklist', name: 'Blacklist', icon: Shield }
+              { id: 'certificates', name: 'Certificates', icon: Shield },
+              { id: 'verifications', name: 'Verifications', icon: Eye },
             ].map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center px-3 py-2 text-sm font-medium rounded-md ${
+                className={`flex items-center px-3 py-2 text-sm font-medium rounded-md whitespace-nowrap ${
                   activeTab === tab.id
                     ? 'bg-blue-100 text-blue-700'
                     : 'text-gray-500 hover:text-gray-700'
@@ -269,10 +307,10 @@ const AdminDashboard = () => {
                         <dd className="text-lg font-medium text-gray-900">{stats.verification_success_rate}%</dd>
                       </dl>
                     </div>
-                  </div>
-                </div>
-              </div>
             </div>
+          </div>
+        </div>
+      </div>
 
             {/* Recent Activity Summary */}
             <div className="bg-white shadow rounded-lg">
@@ -309,7 +347,7 @@ const AdminDashboard = () => {
               {recentActivity.map((activity, index) => (
                 <div key={index} className="px-6 py-4">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center">
+              <div className="flex items-center">
                       {activity.type === 'certificate_issued' ? (
                         <CheckCircle className="h-5 w-5 text-green-500 mr-3" />
                       ) : (
@@ -329,14 +367,14 @@ const AdminDashboard = () => {
                           }
                         </p>
                       </div>
-                    </div>
+                </div>
                     <div className="text-sm text-gray-500">
                       {new Date(activity.timestamp).toLocaleString()}
-                    </div>
-                  </div>
                 </div>
-              ))}
+              </div>
             </div>
+          ))}
+        </div>
           </div>
         )}
 
@@ -437,16 +475,16 @@ const AdminDashboard = () => {
                         Blacklisted
                       </span>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+                </div>
+            ))}
+          </div>
+        </div>
 
             {/* Blacklisted IPs */}
             <div className="bg-white shadow rounded-lg">
-              <div className="px-6 py-4 border-b border-gray-200">
+          <div className="px-6 py-4 border-b border-gray-200">
                 <h3 className="text-lg font-medium text-gray-900">Blacklisted IP Addresses</h3>
-              </div>
+          </div>
               <div className="divide-y divide-gray-200">
                 {blacklist.blacklisted_ips.map((ip, index) => (
                   <div key={index} className="px-6 py-4">
@@ -455,13 +493,240 @@ const AdminDashboard = () => {
                         <p className="text-sm font-mono text-gray-900">{ip.ip_address}</p>
                         <p className="text-sm text-gray-500">Reason: {ip.reason}</p>
                         <p className="text-xs text-gray-400">Blacklisted: {new Date(ip.blacklisted_at).toLocaleString()}</p>
-                      </div>
+                    </div>
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
                         Blacklisted
                       </span>
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Certificates Tab */}
+        {activeTab === 'certificates' && (
+          <div className="space-y-6">
+            <div className="bg-white shadow rounded-lg">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h3 className="text-lg font-medium text-gray-900">All Certificates</h3>
+                <p className="text-sm text-gray-500">Total: {certificates.length} certificates</p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Certificate ID</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Course</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Institution</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {certificates.slice(0, 20).map((cert, index) => (
+                      <tr key={index} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900">
+                          {cert.certificate_id}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {cert.student_name}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {cert.course_name}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {cert.institution}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            cert.status === 'issued' ? 'bg-green-100 text-green-800' :
+                            cert.status === 'revoked' ? 'bg-red-100 text-red-800' :
+                            'bg-yellow-100 text-yellow-800'
+                          }`}>
+                            {cert.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {new Date(cert.created_at).toLocaleDateString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Verifications Tab */}
+        {activeTab === 'verifications' && (
+          <div className="space-y-6">
+            <div className="bg-white shadow rounded-lg">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h3 className="text-lg font-medium text-gray-900">Verification Logs</h3>
+                <p className="text-sm text-gray-500">Total: {verificationLogs.length} verification attempts</p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Verification ID</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Certificate ID</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">IP Address</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Method</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Timestamp</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {verificationLogs.slice(0, 20).map((log, index) => (
+                      <tr key={index} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900">
+                          {log.verification_id}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900">
+                          {log.certificate_id}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            log.status === 'verified' ? 'bg-green-100 text-green-800' :
+                            log.status === 'failed' ? 'bg-red-100 text-red-800' :
+                            'bg-yellow-100 text-yellow-800'
+                          }`}>
+                            {log.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-500">
+                          {log.ip_address}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {log.verification_method}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {new Date(log.created_at).toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* System Health Tab */}
+        {activeTab === 'system' && (
+          <div className="space-y-6">
+            {/* System Status */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-white overflow-hidden shadow rounded-lg">
+                <div className="p-5">
+                  <div className="flex items-center">
+                    <div className="flex-shrink-0">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                        systemHealth.database?.status === 'healthy' ? 'bg-green-100' : 'bg-red-100'
+                      }`}>
+                        <div className={`w-3 h-3 rounded-full ${
+                          systemHealth.database?.status === 'healthy' ? 'bg-green-500' : 'bg-red-500'
+                        }`}></div>
+                      </div>
+                    </div>
+                    <div className="ml-5 w-0 flex-1">
+                      <dl>
+                        <dt className="text-sm font-medium text-gray-500 truncate">Database</dt>
+                        <dd className="text-lg font-medium text-gray-900">
+                          {systemHealth.database?.status || 'Unknown'}
+                        </dd>
+                      </dl>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white overflow-hidden shadow rounded-lg">
+                <div className="p-5">
+                  <div className="flex items-center">
+                    <div className="flex-shrink-0">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                        systemHealth.storage?.status === 'healthy' ? 'bg-green-100' : 'bg-red-100'
+                      }`}>
+                        <div className={`w-3 h-3 rounded-full ${
+                          systemHealth.storage?.status === 'healthy' ? 'bg-green-500' : 'bg-red-500'
+                        }`}></div>
+                      </div>
+                    </div>
+                    <div className="ml-5 w-0 flex-1">
+                      <dl>
+                        <dt className="text-sm font-medium text-gray-500 truncate">Storage</dt>
+                        <dd className="text-lg font-medium text-gray-900">
+                          {systemHealth.storage?.status || 'Unknown'}
+                        </dd>
+                      </dl>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white overflow-hidden shadow rounded-lg">
+                <div className="p-5">
+                  <div className="flex items-center">
+                    <div className="flex-shrink-0">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                        systemHealth.api?.status === 'healthy' ? 'bg-green-100' : 'bg-red-100'
+                      }`}>
+                        <div className={`w-3 h-3 rounded-full ${
+                          systemHealth.api?.status === 'healthy' ? 'bg-green-500' : 'bg-red-500'
+                        }`}></div>
+                      </div>
+                    </div>
+                    <div className="ml-5 w-0 flex-1">
+                      <dl>
+                        <dt className="text-sm font-medium text-gray-500 truncate">API</dt>
+                        <dd className="text-lg font-medium text-gray-900">
+                          {systemHealth.api?.status || 'Unknown'}
+                        </dd>
+                      </dl>
+                    </div>
+                  </div>
+                </div>
+          </div>
+        </div>
+
+            {/* System Metrics */}
+            <div className="bg-white shadow rounded-lg">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h3 className="text-lg font-medium text-gray-900">System Metrics</h3>
+              </div>
+              <div className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-blue-600">
+                      {systemHealth.metrics?.total_certificates || 0}
+                    </div>
+                    <div className="text-sm text-gray-500">Total Certificates</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-green-600">
+                      {systemHealth.metrics?.total_verifications || 0}
+                    </div>
+                    <div className="text-sm text-gray-500">Total Verifications</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-yellow-600">
+                      {systemHealth.metrics?.active_users || 0}
+                    </div>
+                    <div className="text-sm text-gray-500">Active Users</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-purple-600">
+                      {systemHealth.metrics?.uptime || '99.9%'}
+                    </div>
+                    <div className="text-sm text-gray-500">Uptime</div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

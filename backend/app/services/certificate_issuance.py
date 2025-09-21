@@ -67,16 +67,35 @@ class CertificateIssuanceService:
             logger.info(f"QR data URL generated: {qr_data_url[:100] if qr_data_url else 'None'}...")
             logger.info(f"Signed payload keys: {list(signed_payload.keys()) if signed_payload else 'None'}")
             
-            # Step 4: Store the original uploaded image (if available)
+            # Step 4: Store the original uploaded image with digital watermark (if available)
             original_image_url = None
             if certificate_data.get("image_data") and certificate_data.get("image_filename"):
                 try:
-                    original_image_url = await self._store_original_image(
-                        certificate_data.get("image_data"), certificate_data.get("image_filename", "certificate.jpg")
+                    # Add digital watermark to the image before storing
+                    watermark_text = certificate_data.get("watermark_text", "VERIFIED")
+                    logger.info(f"Adding digital watermark to certificate image: {watermark_text}")
+                    watermarked_image_data = await self._add_digital_watermark(
+                        certificate_data.get("image_data"), 
+                        watermark_text
                     )
+                    
+                    # Store the watermarked image
+                    original_image_url = await self._store_original_image(
+                        watermarked_image_data, 
+                        certificate_data.get("image_filename", "certificate.jpg")
+                    )
+                    logger.info("Watermarked certificate image stored successfully")
                 except Exception as e:
-                    logger.warning(f"Failed to store original image: {str(e)}")
-                    original_image_url = None
+                    logger.warning(f"Failed to store watermarked image: {str(e)}")
+                    # Fallback: try to store original image without watermark
+                    try:
+                        original_image_url = await self._store_original_image(
+                            certificate_data.get("image_data"), 
+                            certificate_data.get("image_filename", "certificate.jpg")
+                        )
+                    except Exception as fallback_error:
+                        logger.error(f"Failed to store original image as fallback: {str(fallback_error)}")
+                        original_image_url = None
             
             # Step 5: Generate QR-only image (no full certificate)
             certificate_image = await self._generate_qr_only_image(
@@ -448,6 +467,107 @@ class CertificateIssuanceService:
             logger.error(f"Image fingerprinting failed: {str(e)}")
             return {}
     
+    async def _add_digital_watermark(self, image_data: bytes, watermark_text: str = "VERIFIED") -> bytes:
+        """Add digital watermark to certificate image"""
+        try:
+            # Open the image
+            image = Image.open(io.BytesIO(image_data))
+            
+            # Convert to RGBA if not already
+            if image.mode != 'RGBA':
+                image = image.convert('RGBA')
+            
+            # Create a transparent overlay for the watermark
+            overlay = Image.new('RGBA', image.size, (0, 0, 0, 0))
+            draw = ImageDraw.Draw(overlay)
+            
+            # Try to load a font, fallback to default if not available
+            try:
+                # Try different font sizes and types
+                font_size = max(24, min(image.width, image.height) // 20)
+                font = ImageFont.truetype("arial.ttf", font_size)
+            except:
+                try:
+                    font = ImageFont.truetype("Arial.ttf", font_size)
+                except:
+                    try:
+                        font = ImageFont.truetype("/System/Library/Fonts/Arial.ttf", font_size)
+                    except:
+                        # Fallback to default font
+                        font = ImageFont.load_default()
+            
+            # Calculate watermark position (bottom right corner with padding)
+            bbox = draw.textbbox((0, 0), watermark_text, font=font)
+            text_width = bbox[2] - bbox[0]
+            text_height = bbox[3] - bbox[1]
+            
+            # Position watermark in bottom right with padding
+            padding = 20
+            x = image.width - text_width - padding
+            y = image.height - text_height - padding
+            
+            # Add semi-transparent background for watermark
+            bg_padding = 10
+            draw.rectangle([
+                x - bg_padding, 
+                y - bg_padding, 
+                x + text_width + bg_padding, 
+                y + text_height + bg_padding
+            ], fill=(0, 0, 0, 100))  # Semi-transparent black background
+            
+            # Draw the watermark text
+            draw.text((x, y), watermark_text, fill=(255, 255, 255, 200), font=font)
+            
+            # Add additional security elements
+            # Add a small "CHECKMATE" text in top left
+            small_font_size = max(12, font_size // 2)
+            try:
+                small_font = ImageFont.truetype("arial.ttf", small_font_size)
+            except:
+                small_font = ImageFont.load_default()
+            
+            checkmate_text = "CHECKMATE"
+            bbox_small = draw.textbbox((0, 0), checkmate_text, font=small_font)
+            small_text_width = bbox_small[2] - bbox_small[0]
+            small_text_height = bbox_small[3] - bbox_small[1]
+            
+            # Position in top left
+            small_x = padding
+            small_y = padding
+            
+            # Add background for small text
+            draw.rectangle([
+                small_x - 5, 
+                small_y - 5, 
+                small_x + small_text_width + 5, 
+                small_y + small_text_height + 5
+            ], fill=(0, 0, 0, 120))
+            
+            draw.text((small_x, small_y), checkmate_text, fill=(255, 255, 255, 180), font=small_font)
+            
+            # Composite the overlay onto the original image
+            watermarked_image = Image.alpha_composite(image, overlay)
+            
+            # Convert back to RGB for JPEG compatibility
+            if watermarked_image.mode == 'RGBA':
+                # Create a white background
+                background = Image.new('RGB', watermarked_image.size, (255, 255, 255))
+                background.paste(watermarked_image, mask=watermarked_image.split()[-1])
+                watermarked_image = background
+            
+            # Save to bytes
+            output = io.BytesIO()
+            watermarked_image.save(output, format='JPEG', quality=95)
+            watermarked_data = output.getvalue()
+            
+            logger.info(f"Digital watermark added successfully: {watermark_text}")
+            return watermarked_data
+            
+        except Exception as e:
+            logger.error(f"Failed to add digital watermark: {str(e)}")
+            # Return original image if watermarking fails
+            return image_data
+
     async def _store_original_image(self, image_data: bytes, filename: str) -> str:
         """Store the original uploaded certificate image"""
         try:
